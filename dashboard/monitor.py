@@ -31,6 +31,13 @@ def get_admin_client():
     except Exception:
         return None
 
+def get_val(obj, key, default=None):
+    if not obj:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
 def generate_layout(cluster_info, topic_info, error_msg=None) -> Layout:
     """Generates the Rich layout for the terminal dashboard."""
     layout = Layout()
@@ -54,8 +61,15 @@ def generate_layout(cluster_info, topic_info, error_msg=None) -> Layout:
     if cluster_info:
         cluster_id = cluster_info.get('cluster_id', 'Unknown')
         controller = cluster_info.get('controller')
-        controller_id = controller.nodeId if controller else 'None'
-        active_brokers = sorted([b.nodeId for b in cluster_info.get('brokers', [])])
+        controller_id = get_val(controller, 'nodeId', get_val(controller, 'node_id', 'None'))
+        
+        brokers_list = cluster_info.get('brokers', [])
+        active_brokers = []
+        for b in brokers_list:
+            b_id = get_val(b, 'nodeId', get_val(b, 'node_id'))
+            if b_id is not None:
+                active_brokers.append(b_id)
+        active_brokers = sorted(active_brokers)
         
         cluster_table = Table(show_header=False, box=box.SIMPLE)
         cluster_table.add_row("Cluster ID:", Text(str(cluster_id), style="green"))
@@ -178,9 +192,9 @@ def main():
                 try:
                     cluster_info_raw = admin.describe_cluster()
                     cluster_info = {
-                        'cluster_id': cluster_info_raw.cluster_id,
-                        'controller': cluster_info_raw.controller,
-                        'brokers': cluster_info_raw.brokers
+                        'cluster_id': get_val(cluster_info_raw, 'cluster_id'),
+                        'controller': get_val(cluster_info_raw, 'controller'),
+                        'brokers': get_val(cluster_info_raw, 'brokers', [])
                     }
                 except KafkaError as ke:
                     # Connection might be stale, trigger reconnect
@@ -196,15 +210,16 @@ def main():
                         raw_topic = topics_metadata[0]
                         # Convert kafka-python partition objects to lists of dicts
                         partitions = []
-                        for p in raw_topic.get('partitions', []):
+                        raw_partitions = get_val(raw_topic, 'partitions', [])
+                        for p in raw_partitions:
                             partitions.append({
-                                'partition': p.partition,
-                                'leader': p.leader,
-                                'replicas': p.replicas,
-                                'isr': p.isr
+                                'partition': get_val(p, 'partition'),
+                                'leader': get_val(p, 'leader'),
+                                'replicas': get_val(p, 'replicas', []),
+                                'isr': get_val(p, 'isr', [])
                             })
                         topic_info = {
-                            'topic': raw_topic.get('topic'),
+                            'topic': get_val(raw_topic, 'topic'),
                             'partitions': partitions
                         }
                 except KafkaError:
