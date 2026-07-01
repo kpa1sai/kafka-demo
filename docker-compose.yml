@@ -66,6 +66,8 @@ services:
     build:
       context: ./dashboard
     container_name: kafka-dashboard
+    tty: true
+    stdin_open: true
     environment:
       KAFKA_BOOTSTRAP_SERVERS: 'kafka-1:9092,kafka-2:9092,kafka-3:9092'
     depends_on:
